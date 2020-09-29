@@ -1,3 +1,5 @@
+forked from https://github.com/didw/PyTrader
+
 키움 Open API + 를 이용한 시스템트레이딩
 
 ## 개발환경
