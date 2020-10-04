@@ -55,6 +55,7 @@ class Kiwoom(QAxWidget):
         self.data_opw00018 = {'account_evaluation': [], 'stocks': []}
 
         # 주가상세정보
+        self.data_opt10004 = [] * 15
         self.data_opt10081 = [] * 15
         self.data_opt10086 = [] * 23
 
@@ -71,6 +72,49 @@ class Kiwoom(QAxWidget):
         # 로깅용 설정파일
         logging.config.fileConfig('logging.conf')
         self.log = logging.getLogger('Kiwoom')
+
+        self.event_callback_fn = {
+            "OnEventConnect": {},
+            "OnReceiveTrData": {},
+            "OnReceiveRealData": [],
+            "OnReceiveRealCondition": [],
+            "OnReceiveTrCondition": {},
+            "OnReceiveConditionVer": {},
+            "OnReceiveChejanData": [],
+            "OnReceiveMsg": {},
+        }
+
+    def reg_callback(self, event, key, fn):
+        """특정 이벤트 발생시 호출한 callback 함수를 등록한다.
+
+        :param event:
+        :param key: 일반적으로 screen_no 를 사용하면 된다.
+        :param fn:
+        :return:
+        """
+        if event in ["OnReceiveTrCondition", "OnReceiveTrData"]:
+            self.event_callback_fn[event] = fn
+        else:  # OnReceiveRealCondition, OnReceiveChejanData, OnReceiveRealData
+            if fn not in self.event_callback_fn[event]:
+                self.event_callback_fn[event].append(fn)
+
+    def notify_callback(self, event, data, key=None):
+        """특정 이벤트로 등록한 callback 함수를 호출한다.
+
+        :param event:
+        :param data:
+        :param key: 일반적으로 screen_no 를 사용하면 된다.
+        :return:
+        """
+
+        if event in ["OnReceiveTrCondition", "OnReceiveTrData"]:
+            if key in self.event_callback_fn:
+                self.event_callback_fn[event](data)
+            else:
+                print('key(',key,') not in ', self.event_callback_fn)
+        else:  # OnReceiveRealCondition, OnReceiveChejanData, OnReceiveRealData
+            for fn in self.event_callback_fn[event]:
+                fn(data)
 
     ###############################################################
     # 로깅용 메서드 정의                                               #
@@ -212,6 +256,15 @@ class Kiwoom(QAxWidget):
                             '기관', '외인수량', '외국계', '프로그램', '외인비', '체결강도', '외인보유', '외인비중', '외인순매수',
                             '기관순매수', '개인순매수', '신용잔고율']
                 self.data_opt10086 = DataFrame(self.data_opt10086, columns=col_name)
+
+        if request_name == "주식호가요청":
+            hoga = []
+            key_list = [ "매도최우선잔량","매도최우선호가","매수최우선잔량","매수최우선호가"]
+
+            for key in key_list:
+                value = self.comm_get_data(tr_code, "", request_name, 0, key)
+                hoga.append(value)
+            self.data_opt10004 = hoga
 
         if request_name == "예수금상세현황요청":
             estimate_day2_deposit = self.comm_get_data(tr_code, "", request_name, 0, "d+2추정예수금")
@@ -611,7 +664,12 @@ class Kiwoom(QAxWidget):
             if not receive:
                 return
 
-            self.condition = self.get_condition_name_list()
+            #self.condition = self.get_condition_name_list()
+            condi_name_list = self.get_condition_name_list()
+            self.condition = {}
+            for condition_info in condi_name_list.split(";")[:-1]:
+                condi_index, condi_name = condition_info.split("^")
+                self.condition[condi_name] = condi_index
             print("조건식 개수: ", len(self.condition))
 
             for key in self.condition.keys():
@@ -637,6 +695,14 @@ class Kiwoom(QAxWidget):
 
         print("[receive_tr_condition]")
 
+        data = [
+            ("screen_no", screen_no),
+            ("code_list", codes),
+            ("condi_name", condition_name),
+            ("condi_index", condition_index),
+            ("next", next)
+        ]                                   
+        self.notify_callback('OnReceiveTrCondition', dict(data), key=screen_no)
         try:
             if codes == "":
                 return
@@ -664,6 +730,13 @@ class Kiwoom(QAxWidget):
 
         print("종목코드: ", code)
         print("이벤트: ", "종목편입" if event == "I" else "종목이탈")
+        data = [
+            ("code", code),
+            ("event_type", event_type),
+            ("condi_name", condi_name),
+            ("condi_index", condi_index)
+        ]
+        self.notify_callback('OnReceiveRealCondition', dict(data))
 
     def get_condition_load(self):
         """ 조건식 목록 요청 메서드 """
@@ -691,6 +764,9 @@ class Kiwoom(QAxWidget):
         :return: dict - {인덱스:조건명, 인덱스:조건명, ...}
         """
 
+        ret = self.dynamicCall("GetConditionNameList()")
+        return ret
+        '''
         data = self.dynamicCall("get_condition_name_list()")
 
         if data == "":
@@ -706,6 +782,7 @@ class Kiwoom(QAxWidget):
             condition_dictionary[int(key)] = value
 
         return condition_dictionary
+        '''
 
     def send_condition(self, screen_no, condition_name, condition_index, is_real_time):
         """
