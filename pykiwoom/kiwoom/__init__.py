@@ -108,10 +108,11 @@ class Kiwoom(QAxWidget):
         """
 
         if event in ["OnReceiveTrCondition", "OnReceiveTrData"]:
-            if key in self.event_callback_fn:
+            #if key in self.event_callback_fn:
+            #if event in self.event_callback_fn:
                 self.event_callback_fn[event](data)
-            else:
-                print('key(',key,') not in ', self.event_callback_fn)
+            #else:
+            #    self.log.info('key({}) not in {}'.format(key, self.event_callback_fn))
         else:  # OnReceiveRealCondition, OnReceiveChejanData, OnReceiveRealData
             for fn in self.event_callback_fn[event]:
                 fn(data)
@@ -203,7 +204,7 @@ class Kiwoom(QAxWidget):
         :param inquiry: string - 조회('0': 남은 데이터 없음, '2': 남은 데이터 있음)
         """
 
-        print("on_receive_tr_data 실행: screen_no: %s, request_name: %s, tr_code: %s, record_name: %s, inquiry: %s" % (
+        self.log.debug("on_receive_tr_data 실행: screen_no: %s, request_name: %s, tr_code: %s, record_name: %s, inquiry: %s" % (
             screen_no, request_name, tr_code, record_name, inquiry))
 
         # 주문번호와 주문루프
@@ -343,11 +344,11 @@ class Kiwoom(QAxWidget):
             self.log.error('{}'.format(e))
 
     def on_receive_chejan_data(self, gubun, item_cnt, fid_list):
-        print("gubun: ", gubun)
-        print(self.GetChejanData(9203))
-        print(self.GetChejanData(302))
-        print(self.GetChejanData(900))
-        print(self.GetChejanData(901))
+        self.log.debug("gubun: {}".format(gubun))
+        self.log.debug(self.GetChejanData(9203))
+        self.log.debug(self.GetChejanData(302))
+        self.log.debug(self.GetChejanData(900))
+        self.log.debug(self.GetChejanData(901))
 
     def get_codelist_by_market(self, market):
         func = 'GetCodeListByMarket("%s")' % market
@@ -670,14 +671,14 @@ class Kiwoom(QAxWidget):
             for condition_info in condi_name_list.split(";")[:-1]:
                 condi_index, condi_name = condition_info.split("^")
                 self.condition[condi_name] = condi_index
-            print("조건식 개수: ", len(self.condition))
+            self.log.debug("조건식 개수: {}".format(len(self.condition)))
 
             for key in self.condition.keys():
-                print("조건식: ", key, ": ", self.condition[key])
-                print("key type: ", type(key))
+                self.log.debug("조건식: {} : {}".format(key, self.condition[key]))
+                self.log.debug("key type: {}".format(type(key)))
 
         except Exception as e:
-            print(e)
+            self.log.error(e)
 
         finally:
             self.condition_loop.exit()
@@ -693,7 +694,7 @@ class Kiwoom(QAxWidget):
         :param inquiry: int - 조회구분(0: 남은데이터 없음, 2: 남은데이터 있음)
         """
 
-        print("[receive_tr_condition]")
+        self.log.debug("[receive_tr_condition]")
 
         data = [
             ("screen_no", screen_no),
@@ -710,8 +711,8 @@ class Kiwoom(QAxWidget):
             code_list = codes.split(';')
             del code_list[-1]
 
-            print(code_list)
-            print("종목개수: ", len(code_list))
+            self.log.debug(code_list)
+            self.log.debug("종목개수: {}".format(len(code_list)))
 
         finally:
             self.condition_loop.exit()
@@ -726,15 +727,18 @@ class Kiwoom(QAxWidget):
         :param condition_index: string - 조건식 인덱스(여기서만 인덱스가 string 타입으로 전달됨)
         """
 
-        print("[receive_real_condition]")
+        self.log.debug("[receive_real_condition]")
+        self.log.debug("종목코드 : {}".format(code))
+        if event == 'I':
+            self.log.debug("이벤트: 종목편입")
+        else:
+            self.log.debug("이벤트: 종목이탈")
 
-        print("종목코드: ", code)
-        print("이벤트: ", "종목편입" if event == "I" else "종목이탈")
         data = [
             ("code", code),
-            ("event_type", event_type),
-            ("condi_name", condi_name),
-            ("condi_index", condi_index)
+            ("event_type", event),
+            ("condi_name", condition_name),
+            ("condi_index", condition_index)
         ]
         self.notify_callback('OnReceiveRealCondition', dict(data))
 
