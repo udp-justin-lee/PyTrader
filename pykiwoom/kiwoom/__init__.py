@@ -262,10 +262,14 @@ class Kiwoom(QAxWidget):
             hoga = []
             key_list = [ "매도최우선잔량","매도최우선호가","매수최우선잔량","매수최우선호가"]
 
-            for key in key_list:
-                value = self.comm_get_data(tr_code, "", request_name, 0, key)
-                hoga.append(value)
-            self.data_opt10004 = hoga
+            data = self.get_comm_data_ex(tr_code, "주식호가요청")
+            if data is not None:
+                print(data)
+                data = list(map(lambda x: list(map(lambda y: y.replace('+','').replace('--','-'), x)), data))
+                data = list(map(lambda x: list(map(lambda y: float(y) if y != '' else 0, x)), data))
+                print(data)
+            self.inquiry = 0
+            self.data_opt10004 = data
 
         if request_name == "예수금상세현황요청":
             estimate_day2_deposit = self.comm_get_data(tr_code, "", request_name, 0, "d+2추정예수금")
@@ -437,20 +441,20 @@ class Kiwoom(QAxWidget):
         :param screen_no: string - 화면번호(4자리)
         """
 
-        if not self.get_connect_state():
-            raise KiwoomConnectError()
+        #if not self.get_connect_state():
+        #    raise KiwoomConnectError()
 
-        if not (isinstance(request_name, str)
-                and isinstance(tr_code, str)
-                and isinstance(inquiry, int)
-                and isinstance(screen_no, str)):
-            raise ParameterTypeError()
+        #if not (isinstance(request_name, str)
+        #        and isinstance(tr_code, str)
+        #        and isinstance(inquiry, int)
+        #        and isinstance(screen_no, str)):
+        #    raise ParameterTypeError()
 
         return_code = self.dynamicCall("CommRqData(QString, QString, int, QString)", request_name, tr_code, inquiry,
                                        screen_no)
 
-        if return_code != ReturnCode.OP_ERR_NONE:
-            raise KiwoomProcessingError("comm_rq_data(): " + ReturnCode.CAUSE[return_code])
+        #if return_code != ReturnCode.OP_ERR_NONE:
+        #    raise KiwoomProcessingError("comm_rq_data(): " + ReturnCode.CAUSE[return_code])
 
         # 루프 생성: receive_tr_data() 메서드에서 루프를 종료시킨다.
         self.request_loop = QEventLoop()
@@ -703,7 +707,6 @@ class Kiwoom(QAxWidget):
             ("condi_index", condition_index),
             ("next", next)
         ]                                   
-        self.notify_callback('OnReceiveTrCondition', dict(data), key=screen_no)
         try:
             if codes == "":
                 return
@@ -716,6 +719,7 @@ class Kiwoom(QAxWidget):
 
         finally:
             self.condition_loop.exit()
+        self.notify_callback('OnReceiveTrCondition', dict(data), key=screen_no)
 
     def receive_real_condition(self, code, event, condition_name, condition_index):
         """

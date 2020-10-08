@@ -36,22 +36,22 @@ class MyWindow(QMainWindow, form_class):
 
         self.code_list = self.kiwoom.get_code_list("0")
 
+        '''
         # 메인 타이머
         self.timer = QTimer(self)
         self.timer.start(1000)
         self.timer.timeout.connect(self.timeout)
 
-        '''
         # 자동 주문
         self.timer_stock = QTimer(self)
         self.timer_stock.start(1000*21)
         self.timer_stock.timeout.connect(self.timeout)
-        '''
 
         # 잔고 및 보유종목 조회 타이머
         self.inquiryTimer = QTimer(self)
         self.inquiryTimer.start(1000*10)
         self.inquiryTimer.timeout.connect(self.timeout)
+        '''
 
         self.setAccountComboBox()
         self.codeLineEdit.textChanged.connect(self.set_code_name)
@@ -147,40 +147,49 @@ class MyWindow(QMainWindow, form_class):
             self.show_dialog('Critical', e)
 
     def get_hoga(self, code):
-        self.in_processing = True
+        self.log.debug("get_hoga : {}".format(code))
         try:
             # 주식호가요청
-            self.kiwoom.set_input_value("종목코드", code)
-            self.kiwoom.comm_rq_data("주식호가요청", "opw10004", 0, "2000")
+            self.kiwoom.set_input_value("종목코드", str(code))
+            self.log.debug("send hoga request0")
+            self.kiwoom.comm_rq_data("주식호가요청", "opt10004", 0, "2001")
+            self.log.debug("send hoga request1")
             while self.kiwoom.inquiry == '2':
                 time.sleep(0.2)
-                self.kiwoom.comm_rq_data("주식호가요청", "opw10004", 0, "2000")
+                self.kiwoom.comm_rq_data("주식호가요청", "opt10004", 2, "2001")
         except (ParameterTypeError, ParameterValueError, KiwoomProcessingError) as e:
             self.show_dialog('Critical', e)
-        self.in_processing = False
 
     def inquiry_balance(self):
         """ 예수금상세현황과 계좌평가잔고내역을 요청후 테이블에 출력한다. """
         self.log.debug("예수금상세현황과 계좌평가잔고내역을 요청후 테이블에 출력한다.")
-        self.in_processing = True
+        #self.in_processing = True
         #self.inquiryTimer.stop()
         #self.timer_stock.stop()
 
         try:
-            # 예수금상세현황요청
-            self.kiwoom.set_input_value("계좌번호", self.accountComboBox.currentText())
-            #self.kiwoom.set_input_value("비밀번호", "0000")
-            self.kiwoom.comm_rq_data("예수금상세현황요청", "opw00001", 0, "2000")
-
             # 계좌평가잔고내역요청 - opw00018 은 한번에 20개의 종목정보를 반환
             self.kiwoom.set_input_value("계좌번호", self.accountComboBox.currentText())
             #self.kiwoom.set_input_value("비밀번호", "0000")
-            self.kiwoom.comm_rq_data("계좌평가잔고내역요청", "opw00018", 0, "2000")
+            self.kiwoom.comm_rq_data("계좌평가잔고내역요청", "opw00018", 0, "2001")
             while self.kiwoom.inquiry == '2':
                 time.sleep(0.2)
                 self.kiwoom.set_input_value("계좌번호", self.accountComboBox.currentText())
                 #self.kiwoom.set_input_value("비밀번호", "0000")
-                self.kiwoom.comm_rq_data("계좌평가잔고내역요청", "opw00018", 2, "2")
+                self.kiwoom.comm_rq_data("계좌평가잔고내역요청", "opw00018", 2, "2001")
+
+            # 예수금상세현황요청
+            self.kiwoom.set_input_value("계좌번호", self.accountComboBox.currentText())
+            #self.kiwoom.set_input_value("비밀번호", "0000")
+            self.kiwoom.comm_rq_data("예수금상세현황요청", "opw00001", 0, "2000")
+            while self.kiwoom.inquiry == '2':
+                time.sleep(0.2)
+                self.kiwoom.set_input_value("계좌번호", self.accountComboBox.currentText())
+                #self.kiwoom.set_input_value("비밀번호", "0000")
+                self.kiwoom.comm_rq_data("예수금상세현황요청", "opw00001", 2, "2000")
+
+            #self.get_hoga("005880")
+
         except (ParameterTypeError, ParameterValueError, KiwoomProcessingError) as e:
             self.show_dialog('Critical', e)
 
@@ -362,28 +371,32 @@ class MyWindow(QMainWindow, form_class):
                     self.log.debug("총예수금({}) 부족으로 추가 매수하지 않습니다.".format(총예수금))
                     return
 
-                '''
-                for code in event_data["code_list"]:
+                #event_data["code_list"] = '005880;009440;071320;090360;138040;'
+                code_list = event_data["code_list"].split(';')
+                del code_list[-1]
 
-                if event_data["code_list"] in self.my_stock_pocket:
-                    self.log.debug("해당 종목({}) 이미 보유중이라 추가매수하지 않습니다.".format(event_data["code"]))
-                    return
+                for code in code_list:
+                    print(code)
+                    if code in self.my_stock_pocket:
+                        self.log.debug("해당 종목({}) 이미 보유중이라 추가매수하지 않습니다.".format(event_data["code"]))
+                        return
 
-                self.get_hoga(event_data["code"])
-                hoga = self.kiwoom.data_opt10004
-                self.log.debug(code, ': hoga: ', hoga)
-                curr_price = hoga[1]
-                qty1 = int(5000000/curr_price)
-                qty2 = int(hoga[0]/30)
-                quantity = min(qty1, qty2)
-                # self.kw.reg_callback("OnReceiveChejanData", ("조건식매수", "5000"), self.account_stat)
-                self.log.debug("{}를 {}주 시장가_신규매수합니다.".format(event_data["code"], quantity))
-                self.my_stock_pocket.add(event_data["code"])
-                self.my_stocks[event_data["code"]] = quantity
-                # self.kw.시장가_신규매수(event_data["code"], quantity)
-                # self.kw.send_order("조건식매수", "5000", self.acc_no, 1, event_data["code"], quantity, 0, "03", ""
-                self.inquiry_balance()
-                '''
+                    self.get_hoga(code)
+                    '''
+                    hoga = self.kiwoom.data_opt10004
+                    self.log.debug('{}: hoga: {}'.format(code, hoga))
+                    curr_price = hoga[1]
+                    qty1 = int(5000000/curr_price)
+                    qty2 = int(hoga[0]/30)
+                    quantity = min(qty1, qty2)
+                    # self.kw.reg_callback("OnReceiveChejanData", ("조건식매수", "5000"), self.account_stat)
+                    self.log.debug("{}를 {}주 시장가_신규매수합니다.".format(code, quantity))
+                    self.my_stock_pocket.add(code)
+                    self.my_stocks[code] = quantity
+                    # self.kw.시장가_신규매수(event_data["code"], quantity)
+                    # self.kw.send_order("조건식매수", "5000", self.acc_no, 1, event_data["code"], quantity, 0, "03", ""
+                    self.inquiry_balance()
+                    '''
 
     def conditional_sell_tr(self, event_data):
         self.log.debug('conditional_sell(%s)'%(event_data["condi_name"]))
@@ -445,12 +458,13 @@ class MyWindow(QMainWindow, form_class):
 
     def launch_conditions(self):
         self.log.debug("launch_conditions")
-        self.kiwoom.get_condition_load()
+
+        self.timer = None
 
         self.kiwoom.reg_callback("OnReceiveTrCondition", "", self.conditional_trade_tr)
         #self.kiwoom.reg_callback("OnReceiveRealCondition", "", self.conditional_trade)
-        time.sleep(0.5)
 
+        self.kiwoom.get_condition_load()
         condi_info = self.kiwoom.condition
         screen_no, cnt = 4000, 0
         for condi_name, condi_id in condi_info.items():
